@@ -1,13 +1,16 @@
 <img src="https://github.com/rabobank-cdc/DeTTECT/wiki/images/logo.png" alt="DeTT&CT" width=30% height=30%>
 
 #### Detect Tactics, Techniques & Combat Threats
-Latest version: [1.2.6](https://github.com/rabobank-cdc/DeTTECT/wiki/Changelog#version-126)
+Latest version: [1.4.2](https://github.com/rabobank-cdc/DeTTECT/wiki/Changelog#version-142)
 
-To get started with DeTT&CT, check out this [page](https://github.com/rabobank-cdc/DeTTECT/wiki/Getting-started), our [talk](https://www.youtube.com/watch?v=_kWpekkhomU) at hack.lu 2019 and our blog on:
-- [mbsecure.nl/blog/2019/5/dettact-mapping-your-blue-team-to-mitre-attack](https://www.mbsecure.nl/blog/2019/5/dettact-mapping-your-blue-team-to-mitre-attack) or
-- [siriussecurity.nl/blog/2019/5/8/mapping-your-blue-team-to-mitre-attack](https://www.siriussecurity.nl/blog/2019/5/8/mapping-your-blue-team-to-mitre-attack).
+To get started with DeTT&CT, check out one of these resources:
+- This [page](https://github.com/rabobank-cdc/DeTTECT/wiki/Getting-started) on the Wiki.
+- Our [talk](https://www.youtube.com/watch?v=_kWpekkhomU) at hack.lu 2019.
+- Blog: [mbsecure.nl/blog/2019/5/dettact-mapping-your-blue-team-to-mitre-attack](https://www.mbsecure.nl/blog/2019/5/dettact-mapping-your-blue-team-to-mitre-attack) or
+- Blog: [siriussecurity.nl/blog/2019/5/8/mapping-your-blue-team-to-mitre-attack](https://www.siriussecurity.nl/blog/2019/5/8/mapping-your-blue-team-to-mitre-attack).
+- The [video](https://www.youtube.com/watch?v=EXnutTLKS5o) from [Justin Henderson](https://twitter.com/SecurityMapper) on data source visibility and mapping.
 
-DeTT&CT aims to assist blue teams using ATT&CK to score and compare data log source quality, visibility coverage, detection coverage and threat actor behaviours. All of which can help, in different ways, to get more resilient against attacks targeting your organisation. The DeTT&CT framework consists of a Python tool, YAML administration files and [scoring tables](https://github.com/rabobank-cdc/DeTTECT/raw/master/scoring_table.xlsx) for the different aspects.
+DeTT&CT aims to assist blue teams using ATT&CK to score and compare data log source quality, visibility coverage, detection coverage and threat actor behaviours. All of which can help, in different ways, to get more resilient against attacks targeting your organisation. The DeTT&CT framework consists of a Python tool, YAML administration files, the [DeTT&CT Editor](https://rabobank-cdc.github.io/dettect-editor) and [scoring tables](https://github.com/rabobank-cdc/DeTTECT/raw/master/scoring_table.xlsx) for the different aspects.
 
 DeTT&CT provides the following functionality:
 
@@ -19,7 +22,7 @@ DeTT&CT provides the following functionality:
 
 The coloured visualisations are created with the help of MITRE's [ATT&CK™ Navigator](https://github.com/mitre-attack/attack-navigator).
 
-## Authors and contribution
+## Authors and contributions
 This project is developed and maintained by [Marcus Bakker](https://github.com/marcusbakker) (Twitter: [@bakk3rm](https://twitter.com/bakk3rm)) and [Ruben Bouman](https://github.com/rubinatorz) (Twitter: [@rubenb_2](https://twitter.com/rubenb_2/)). Feel free to contact, DMs are open.
 
 We welcome contributions! Contributions can be both in code, as well as in ideas you might have for further development, usability improvements, etc.
@@ -40,11 +43,9 @@ See below an example of mapping your data sources to ATT&CK, which gives you a r
 
  <img src="https://raw.githubusercontent.com/wiki/rabobank-cdc/DeTTECT/images/example_data_sources.png" alt="DeTT&CT - Data quality">
 
-
 ## Installation and requirements
 
 See our GitHub Wiki: [Installation and requirements](https://github.com/rabobank-cdc/DeTTECT/wiki/Installation-and-requirements).
-
 
 ## License: GPL-3.0
 [DeTT&CT's GNU General Public License v3.0](https://github.com/rabobank-cdc/DeTTECT/blob/master/LICENSE)

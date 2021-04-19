@@ -6,10 +6,9 @@ from eql_yaml import *
 
 groups = 'all'
 software_group = False
-default_platform = 'Windows'
-default_stage = 'attack'
+default_platform = ['Windows']
 default_matrix = 'enterprise'
-groups_overlay = ''
+groups_overlay = ['']
 overlay_type = 'group'
 yaml_path = 'sample-data/'
 eql_all_scores = False
@@ -31,9 +30,9 @@ def _clear():
     name = '-= %s =-' % APP_NAME
     desc = '-- %s --' % APP_DESC
     version = 'version %s' % VERSION
-    print(' ' * int((len(desc)-len(name))/2) + name)
+    print(' ' * int((len(desc) - len(name)) / 2) + name)
     print(desc)
-    print(' ' * int((len(desc)-len(version))/2) + version)
+    print(' ' * int((len(desc) - len(version)) / 2) + version)
     print('')
 
 
@@ -273,19 +272,19 @@ def _menu_data_source(filename_ds):
                 _menu_data_source(filename_ds)
         if choice == '3':
             print('Writing data sources layer...')
-            generate_data_sources_layer(file_ds)
+            generate_data_sources_layer(file_ds, None, None)
             _wait()
         elif choice == '4':
             print('Drawing the graph...')
-            plot_data_sources_graph(file_ds)
+            plot_data_sources_graph(file_ds, None)
             _wait()
         elif choice == '5':
             print('Generating Excel file...')
-            export_data_source_list_to_excel(file_ds, eql_search=eql_query_data_sources)
+            export_data_source_list_to_excel(file_ds, None, eql_search=eql_query_data_sources)
             _wait()
         elif choice == '6':
             print('Generating YAML file...')
-            generate_technique_administration_file(file_ds, all_techniques=yaml_all_techniques)
+            generate_technique_administration_file(file_ds, None, all_techniques=yaml_all_techniques)
             _wait()
     elif choice == '7':
         filename_t = _select_file(MENU_NAME_DETECTION_COVERAGE_MAPPING, 'techniques (used to score the level of visibility)',
@@ -352,22 +351,22 @@ def _menu_detection(filename_t):
                 _menu_detection(filename_t)
         if choice == '4':
             print('Writing detection coverage layer...')
-            generate_detection_layer(file_tech, None, False)
+            generate_detection_layer(file_tech, None, False, None, None)
             _wait()
         elif choice == '5':
             filename_ds = _select_file(MENU_NAME_DETECTION_COVERAGE_MAPPING, 'data sources (used to add metadata on the '
                                                                              'involved data sources to the heat map)',
                                        FILE_TYPE_DATA_SOURCE_ADMINISTRATION, False)
             print('Writing detection coverage layer with visibility as overlay...')
-            generate_detection_layer(file_tech, filename_ds, True)
+            generate_detection_layer(file_tech, filename_ds, True, None, None)
             _wait()
         elif choice == '6':
             print('Drawing the graph...')
-            plot_graph(file_tech, 'detection')
+            plot_graph(file_tech, 'detection', None)
             _wait()
         elif choice == '7':
             print('Generating Excel file...')
-            export_techniques_list_to_excel(file_tech)
+            export_techniques_list_to_excel(file_tech, None)
             _wait()
     elif choice == '8':
         print('Checking the technique YAML file for errors...')
@@ -430,19 +429,19 @@ def _menu_visibility(filename_t, filename_ds):
                 _menu_visibility(filename_t, filename_ds)
         if choice == '4':
             print('Writing visibility coverage layer...')
-            generate_visibility_layer(file_tech, filename_ds, False)
+            generate_visibility_layer(file_tech, filename_ds, False, None, None)
             _wait()
         elif choice == '5':
             print('Writing visibility coverage layer overlaid with detections...')
-            generate_visibility_layer(file_tech, filename_ds, True)
+            generate_visibility_layer(file_tech, filename_ds, True, None, None)
             _wait()
         elif choice == '6':
             print('Drawing the graph...')
-            plot_graph(file_tech, 'visibility')
+            plot_graph(file_tech, 'visibility', None)
             _wait()
         elif choice == '7':
             print('Generating Excel file...')
-            export_techniques_list_to_excel(file_tech)
+            export_techniques_list_to_excel(file_tech, None)
             _wait()
         elif choice == '8':
             print('Checking the technique YAML file for errors...')
@@ -460,20 +459,19 @@ def _menu_groups():
     Prints and handles the Threat actor group mapping functionality.
     :return:
     """
-    global groups, software_group, default_platform, default_stage, groups_overlay, overlay_type, eql_all_scores, \
+    global groups, software_group, default_platform, groups_overlay, overlay_type, eql_all_scores, \
         eql_query_detection, eql_query_visibility
     _clear()
     print('Menu: %s' % MENU_NAME_THREAT_ACTOR_GROUP_MAPPING)
     print('')
     print('Options:')
     print('1. Software group: %s' % str(software_group))
-    print('2. Platform: %s' % default_platform)
-    print('3. Stage: %s' % default_stage)
-    print('4. Groups: %s' % groups)
-    print('5. Overlay: ')
-    print('    - %s: %s' % ('File' if os.path.exists(groups_overlay) else 'Groups', groups_overlay))
+    print('2. Platform: %s' % ','.join(default_platform))
+    print('3. Groups: %s' % groups)
+    print('4. Overlay: ')
+    print('    - %s: %s' % ('File' if os.path.exists(groups_overlay[0]) else 'Groups', ",".join(groups_overlay)))
     print('    - Type: %s' % overlay_type)
-    print('6. EQL search: ')
+    print('5. EQL search: ')
     eql_d_str = '' if not eql_query_detection else eql_query_detection
     eql_v_str = '' if not eql_query_visibility else eql_query_visibility
     print('    - Only include detection objects which match the EQL query: ' + eql_d_str)
@@ -481,7 +479,7 @@ def _menu_groups():
     print('    - Include all \'score\' objects from the \'score_logbook\' in the EQL search: ' + str(eql_all_scores))
     print('')
     print('Select what you want to do:')
-    print('7. Generate a heat map layer.')
+    print('6. Generate a heat map layer.')
     print('9. Back to main menu.')
     choice = _ask_input()
     if choice == '1':
@@ -489,17 +487,13 @@ def _menu_groups():
     elif choice == '2':
         print('Specify platform (%s):' % ', '.join(['all'] + list(PLATFORMS.values())))
         p = _ask_input().lower()
-        default_platform = PLATFORMS[p] if p in PLATFORMS.keys() else 'all'
+        default_platform = [PLATFORMS[p]] if p in PLATFORMS.keys() else ['all']
     elif choice == '3':
-        print('Specify stage (pre-attack, attack):')
-        s = _ask_input().lower()
-        default_stage = 'pre-attack' if s == 'pre-attack' else 'attack'
-    elif choice == '4':
         print('Specify the groups to include separated using commas. Group can be their ID, name or alias '
               '(default is all groups). Other option is to provide a YAML file with a custom group(s)')
         g = _ask_input()
         groups = g if g != '' else 'all'
-    elif choice == '5':
+    elif choice == '4':
         print('')
         print('1. Overlay with groups.')
         print('2. Overlay with detections.')
@@ -511,17 +505,17 @@ def _menu_groups():
                   'A group can be their ID, name or alias separated using commas. Other option is to provide a YAML '
                   'file with a custom group(s).')
             overlay_type = OVERLAY_TYPE_GROUP
-            groups_overlay = _ask_input()
+            groups_overlay = _ask_input().split(",")
         elif choice == '2':
             overlay_type = OVERLAY_TYPE_DETECTION
-            groups_overlay = _select_file(MENU_NAME_THREAT_ACTOR_GROUP_MAPPING, 'techniques', FILE_TYPE_TECHNIQUE_ADMINISTRATION, False)
+            groups_overlay = [_select_file(MENU_NAME_THREAT_ACTOR_GROUP_MAPPING, 'techniques', FILE_TYPE_TECHNIQUE_ADMINISTRATION, False)]
         elif choice == '3':
             overlay_type = OVERLAY_TYPE_VISIBILITY
-            groups_overlay = _select_file(MENU_NAME_THREAT_ACTOR_GROUP_MAPPING, 'techniques', FILE_TYPE_TECHNIQUE_ADMINISTRATION, False)
+            groups_overlay = [_select_file(MENU_NAME_THREAT_ACTOR_GROUP_MAPPING, 'techniques', FILE_TYPE_TECHNIQUE_ADMINISTRATION, False)]
         elif choice == '4':
             overlay_type = ''
-            groups_overlay = ''
-    elif choice == '6':
+            groups_overlay = ['']
+    elif choice == '5':
         print('')
         print('1. Only include detection objects which match the EQL query: ' + eql_d_str)
         print('2. Only include visibility objects which match the EQL query: ' + eql_v_str)
@@ -537,12 +531,14 @@ def _menu_groups():
         elif choice == '3':
             eql_all_scores = not eql_all_scores
 
-    elif choice == '7':
-        if not generate_group_heat_map(groups, groups_overlay, overlay_type, default_stage, default_platform,
-                                       software_group, eql_query_visibility, eql_query_detection, False,
-                                       include_all_score_objs=eql_all_scores):
-            _wait()
-            _menu_groups()
+    elif choice == '6':
+        if groups_overlay == ['']:
+            groups_overlay = None
+        generate_group_heat_map([groups], groups_overlay, overlay_type, default_platform,
+                                software_group, eql_query_visibility, eql_query_detection, False,
+                                None, None, include_all_score_objs=eql_all_scores)
+        if groups_overlay is None:
+            groups_overlay = ['']
         _wait()
     elif choice == '9':
         interactive_menu()

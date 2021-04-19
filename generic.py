@@ -1,14 +1,19 @@
 import os
 import shutil
 import pickle
+from datetime import datetime as dt
 from io import StringIO
 from ruamel.yaml import YAML
-from datetime import datetime as dt
-from upgrade import upgrade_yaml_file
+from ruamel.yaml.timestamp import TimeStamp as ruamelTimeStamp
+from upgrade import upgrade_yaml_file, check_yaml_updated_to_sub_techniques
 from constants import *
 from health import check_yaml_file_health
+from requests import exceptions
+from stix2 import datastore
 
 # Due to performance reasons the import of attackcti is within the function that makes use of this library.
+
+local_stix_path = None
 
 
 def _save_attack_data(data, path):
@@ -27,28 +32,45 @@ def _save_attack_data(data, path):
 
 def load_attack_data(data_type):
     """
-    Load the cached ATT&CK data from disk, if not expired (data file on disk is older then EXPIRE_TIME seconds).
+    By default the ATT&CK data is loaded from the online TAXII server or from the local cache directory. The
+    local cache directory will be used if the file is not expired (data file on disk is older then EXPIRE_TIME
+    seconds). When the local_stix_path option is given, the ATT&CK data will be loaded from the given path of
+    a local STIX repository.
     :param data_type: the desired data type, see DATATYPE_XX constants.
     :return: MITRE ATT&CK data object (STIX or custom schema)
     """
-    if os.path.exists("cache/" + data_type):
-        with open("cache/" + data_type, 'rb') as f:
-            cached = pickle.load(f)
-            write_time = cached[1]
-            if not (dt.now() - write_time).total_seconds() >= EXPIRE_TIME:
-                # the first item in the list contains the ATT&CK data
-                return cached[0]
-
     from attackcti import attack_client
-    mitre = attack_client()
+    if local_stix_path is not None:
+        if local_stix_path is not None and os.path.isdir(os.path.join(local_stix_path, 'enterprise-attack')) \
+                and os.path.isdir(os.path.join(local_stix_path, 'pre-attack')) \
+                and os.path.isdir(os.path.join(local_stix_path, 'mobile-attack')):
+            mitre = attack_client(local_path=local_stix_path)
+        else:
+            print('[!] Not a valid local STIX path: ' + local_stix_path)
+            quit()
+    else:
+        if os.path.exists("cache/" + data_type):
+            with open("cache/" + data_type, 'rb') as f:
+                cached = pickle.load(f)
+                write_time = cached[1]
+                if not (dt.now() - write_time).total_seconds() >= EXPIRE_TIME:
+                    # the first item in the list contains the ATT&CK data
+                    return cached[0]
+        try:
+            mitre = attack_client()
+        except (exceptions.ConnectionError, datastore.DataSourceError):
+            print("[!] Cannot connect to MITRE's CTI TAXII server")
+            quit()
 
     attack_data = None
     if data_type == DATA_TYPE_STIX_ALL_RELATIONSHIPS:
         attack_data = mitre.get_relationships()
         attack_data = mitre.remove_revoked(attack_data)
+        attack_data = mitre.remove_deprecated(attack_data)
     elif data_type == DATA_TYPE_STIX_ALL_TECH_ENTERPRISE:
         attack_data = mitre.get_enterprise_techniques()
         attack_data = mitre.remove_revoked(attack_data)
+        attack_data = mitre.remove_deprecated(attack_data)
     elif data_type == DATA_TYPE_CUSTOM_TECH_BY_GROUP:
         # First we need to know which technique references (STIX Object type 'attack-pattern') we have for all
         # groups. This results in a dict: {group_id: Gxxxx, technique_ref/attack-pattern_ref: ...}
@@ -90,12 +112,15 @@ def load_attack_data(data_type):
     elif data_type == DATA_TYPE_STIX_ALL_TECH:
         attack_data = mitre.get_techniques()
         attack_data = mitre.remove_revoked(attack_data)
+        attack_data = mitre.remove_deprecated(attack_data)
     elif data_type == DATA_TYPE_STIX_ALL_GROUPS:
         attack_data = mitre.get_groups()
         attack_data = mitre.remove_revoked(attack_data)
+        attack_data = mitre.remove_deprecated(attack_data)
     elif data_type == DATA_TYPE_STIX_ALL_SOFTWARE:
         attack_data = mitre.get_software()
         attack_data = mitre.remove_revoked(attack_data)
+        attack_data = mitre.remove_deprecated(attack_data)
     elif data_type == DATA_TYPE_CUSTOM_TECH_BY_SOFTWARE:
         # First we need to know which technique references (STIX Object type 'attack-pattern') we have for all software
         # This results in a dict: {software_id: Sxxxx, technique_ref/attack-pattern_ref: ...}
@@ -162,50 +187,51 @@ def load_attack_data(data_type):
     elif data_type == DATA_TYPE_STIX_ALL_ENTERPRISE_MITIGATIONS:
         attack_data = mitre.get_enterprise_mitigations()
         attack_data = mitre.remove_revoked(attack_data)
+        attack_data = mitre.remove_deprecated(attack_data)
 
     elif data_type == DATA_TYPE_STIX_ALL_MOBILE_MITIGATIONS:
         attack_data = mitre.get_mobile_mitigations()
         attack_data = mitre.remove_revoked(attack_data)
+        attack_data = mitre.remove_deprecated(attack_data)
 
-    _save_attack_data(attack_data, "cache/" + data_type)
+    # Only use cache when using online TAXII server:
+    if local_stix_path is None:
+        _save_attack_data(attack_data, "cache/" + data_type)
 
     return attack_data
 
 
 def init_yaml():
+    """
+    Initialize ruamel.yaml with the correct settings
+    :return: am uamel.yaml object
+    """
     _yaml = YAML()
     _yaml.Representer.ignore_aliases = lambda *args: True  # disable anchors/aliases
     return _yaml
 
 
-def _get_base_template(name, description, stage, platform, sorting):
+def _get_base_template(name, description, platform, sorting):
     """
     Prepares a base template for the json layer file that can be loaded into the MITRE ATT&CK Navigator.
     More information on the layer format can be found here: https://github.com/mitre/attack-navigator/blob/master/layers/
     :param name: name
     :param description: description
-    :param stage: stage (act | prepare)
     :param platform: platform
     :param sorting: sorting
     :return: layer template dictionary
     """
     layer = dict()
     layer['name'] = name
-    layer['version'] = '2.2'
-    layer['domain'] = 'mitre-enterprise'
+    layer['versions'] = {'navigator': '4.1', 'layer': '4.1'}
+    layer['domain'] = 'enterprise-attack'
     layer['description'] = description
 
-    if platform == 'all':
-        platform = list(PLATFORMS.values())
-
-    if stage == 'attack':
-        layer['filters'] = {'stages': ['act'], 'platforms': platform}
-    else:
-        layer['filters'] = {'stages': ['prepare'], 'platforms': platform}
-
+    layer['filters'] = {'platforms': platform}
     layer['sorting'] = sorting
-    layer['viewMode'] = 0
+    layer['layout'] = {"layout": "flat", "showName": True, "showID": False}
     layer['hideDisable'] = False
+    layer['selectSubtechniquesWithParent'] = False
     layer['techniques'] = []
 
     layer['showTacticRowBackground'] = False
@@ -214,20 +240,18 @@ def _get_base_template(name, description, stage, platform, sorting):
     return layer
 
 
-def get_layer_template_groups(name, max_count, description, stage, platform, overlay_type):
+def get_layer_template_groups(name, max_count, description, platform, overlay_type):
     """
     Prepares a base template for the json layer file that can be loaded into the MITRE ATT&CK Navigator.
-    More information on the version 2.2 layer format:
-    https://github.com/mitre/attack-navigator/blob/master/layers/LAYERFORMATv2_1.md
+    More information on the layer format can be found here: https://github.com/mitre/attack-navigator/blob/master/layers/
     :param name: name
     :param max_count: the sum of all count values
     :param description: description
-    :param stage: stage (act | prepare)
     :param platform: platform
     :param overlay_type: group, visibility or detection
     :return: layer template dictionary
     """
-    layer = _get_base_template(name, description, stage, platform, 3)
+    layer = _get_base_template(name, description, platform, 3)
     layer['gradient'] = {'colors': [COLOR_GRADIENT_MIN, COLOR_GRADIENT_MAX], 'minValue': 0, 'maxValue': max_count}
     layer['legendItems'] = []
     layer['legendItems'].append({'label': 'Tech. not often used', 'color': COLOR_GRADIENT_MIN})
@@ -239,27 +263,41 @@ def get_layer_template_groups(name, max_count, description, stage, platform, ove
         layer['legendItems'].append({'label': 'Src. of tech. is only software', 'color': COLOR_SOFTWARE})
         layer['legendItems'].append({'label': 'Src. of tech. is group(s)/overlay + software', 'color': COLOR_GROUP_AND_SOFTWARE})
     elif overlay_type == OVERLAY_TYPE_DETECTION:
-        layer['legendItems'].append({'label': 'Tech. in group + detection', 'color': COLOR_GROUP_OVERLAY_MATCH})
-        layer['legendItems'].append({'label': 'Tech. in detection', 'color': COLOR_GROUP_OVERLAY_ONLY_DETECTION})
+        layer['legendItems'].append({'label': 'Tech. in group + detection score 0: Forensics/Context', 'color': COLOR_O_0})
+        layer['legendItems'].append({'label': 'Tech. in group + detection score 1: Basic', 'color': COLOR_O_1})
+        layer['legendItems'].append({'label': 'Tech. in group + detection score 2: Fair', 'color': COLOR_O_2})
+        layer['legendItems'].append({'label': 'Tech. in group + detection score 3: Good', 'color': COLOR_O_3})
+        layer['legendItems'].append({'label': 'Tech. in group + detection score 4: Very good', 'color': COLOR_O_4})
+        layer['legendItems'].append({'label': 'Tech. in group + detection score 5: Excellent', 'color': COLOR_O_5})
+        layer['legendItems'].append({'label': 'Tech. in detection, score 0: Forensics/Context', 'color': COLOR_D_0})
+        layer['legendItems'].append({'label': 'Tech. in detection, score 1: Basic', 'color': COLOR_D_1})
+        layer['legendItems'].append({'label': 'Tech. in detection, score 2: Fair', 'color': COLOR_D_2})
+        layer['legendItems'].append({'label': 'Tech. in detection, score 3: Good', 'color': COLOR_D_3})
+        layer['legendItems'].append({'label': 'Tech. in detection, score 4: Very good', 'color': COLOR_D_4})
+        layer['legendItems'].append({'label': 'Tech. in detection, score 5: Excellent', 'color': COLOR_D_5})
     elif overlay_type == OVERLAY_TYPE_VISIBILITY:
-        layer['legendItems'].append({'label': 'Tech. in group + visibility', 'color': COLOR_GROUP_OVERLAY_MATCH})
-        layer['legendItems'].append({'label': 'Tech. in visibility', 'color': COLOR_GROUP_OVERLAY_ONLY_VISIBILITY})
+        layer['legendItems'].append({'label': 'Tech. in group + visibility score 1: Minimal', 'color': COLOR_O_1})
+        layer['legendItems'].append({'label': 'Tech. in group + visibility score 2: Medium', 'color': COLOR_O_2})
+        layer['legendItems'].append({'label': 'Tech. in group + visibility score 3: Good', 'color': COLOR_O_3})
+        layer['legendItems'].append({'label': 'Tech. in group + visibility score 4: Excellent', 'color': COLOR_O_4})
+        layer['legendItems'].append({'label': 'Tech. in visibility, score 1: Minimal', 'color': COLOR_V_1})
+        layer['legendItems'].append({'label': 'Tech. in visibility, score 2: Medium', 'color': COLOR_V_2})
+        layer['legendItems'].append({'label': 'Tech. in visibility, score 3: Good', 'color': COLOR_V_3})
+        layer['legendItems'].append({'label': 'Tech. in visibility, score 4: Excellent', 'color': COLOR_V_4})
 
     return layer
 
 
-def get_layer_template_detections(name, description, stage, platform):
+def get_layer_template_detections(name, description, platform):
     """
     Prepares a base template for the json layer file that can be loaded into the MITRE ATT&CK Navigator.
-    More information on the version 2.2 layer format:
-    https://github.com/mitre/attack-navigator/blob/master/layers/LAYERFORMATv2_1.md
+    More information on the layer format can be found here: https://github.com/mitre/attack-navigator/blob/master/layers/
     :param name: name
     :param description: description
-    :param stage: stage (act | prepare)
     :param platform: platform
     :return: layer template dictionary
     """
-    layer = _get_base_template(name, description, stage, platform, 0)
+    layer = _get_base_template(name, description, platform, 0)
     layer['legendItems'] = \
         [
             {'label': 'Detection score 0: Forensics/Context', 'color': COLOR_D_0},
@@ -268,22 +306,20 @@ def get_layer_template_detections(name, description, stage, platform):
             {'label': 'Detection score 3: Good', 'color': COLOR_D_3},
             {'label': 'Detection score 4: Very good', 'color': COLOR_D_4},
             {'label': 'Detection score 5: Excellent', 'color': COLOR_D_5}
-        ]
+    ]
     return layer
 
 
-def get_layer_template_data_sources(name, description, stage, platform):
+def get_layer_template_data_sources(name, description, platform):
     """
     Prepares a base template for the json layer file that can be loaded into the MITRE ATT&CK Navigator.
-    More information on the version 2.2 layer format:
-    https://github.com/mitre/attack-navigator/blob/master/layers/LAYERFORMATv2_1.md
+    More information on the layer format can be found here: https://github.com/mitre/attack-navigator/blob/master/layers/
     :param name: name
     :param description: description
-    :param stage: stage (act | prepare)
     :param platform: platform
     :return: layer template dictionary
     """
-    layer = _get_base_template(name, description, stage, platform, 0)
+    layer = _get_base_template(name, description, platform, 0)
     layer['legendItems'] = \
         [
             {'label': '1-25% of data sources available', 'color': COLOR_DS_25p},
@@ -291,63 +327,75 @@ def get_layer_template_data_sources(name, description, stage, platform):
             {'label': '51-75% of data sources available', 'color': COLOR_DS_75p},
             {'label': '76-99% of data sources available', 'color': COLOR_DS_99p},
             {'label': '100% of data sources available', 'color': COLOR_DS_100p}
-        ]
+    ]
     return layer
 
 
-def get_layer_template_visibility(name, description, stage, platform):
+def get_layer_template_visibility(name, description, platform):
     """
     Prepares a base template for the json layer file that can be loaded into the MITRE ATT&CK Navigator.
-    More information on the version 2.2 layer format:
-    https://github.com/mitre/attack-navigator/blob/master/layers/LAYERFORMATv2_1.md
+    More information on the layer format can be found here: https://github.com/mitre/attack-navigator/blob/master/layers/
     :param name: name
     :param description: description
-    :param stage: stage (act | prepare)
     :param platform: platform
     :return: layer template dictionary
     """
-    layer = _get_base_template(name, description, stage, platform, 0)
+    layer = _get_base_template(name, description, platform, 0)
     layer['legendItems'] = \
         [
             {'label': 'Visibility score 1: Minimal', 'color': COLOR_V_1},
             {'label': 'Visibility score 2: Medium', 'color': COLOR_V_2},
             {'label': 'Visibility score 3: Good', 'color': COLOR_V_3},
             {'label': 'Visibility score 4: Excellent', 'color': COLOR_V_4}
-        ]
+    ]
     return layer
 
 
-def get_layer_template_layered(name, description, stage, platform):
+def get_layer_template_layered(name, description, platform):
     """
     Prepares a base template for the json layer file that can be loaded into the MITRE ATT&CK Navigator.
-    More information on the version 2.2 layer format:
-    https://github.com/mitre/attack-navigator/blob/master/layers/LAYERFORMATv2_1.md
+    More information on the layer format can be found here: https://github.com/mitre/attack-navigator/blob/master/layers/
     :param name: name
     :param description: description
-    :param stage: stage (act | prepare)
     :param platform: platform
     :return: layer template dictionary
     """
-    layer = _get_base_template(name, description, stage, platform, 0)
+    layer = _get_base_template(name, description, platform, 0)
     layer['legendItems'] = \
         [
-            {'label': 'Visibility', 'color': COLOR_OVERLAY_VISIBILITY},
-            {'label': 'Detection', 'color': COLOR_OVERLAY_DETECTION},
-            {'label': 'Visibility and detection', 'color': COLOR_OVERLAY_BOTH}
-        ]
+            {'label': 'Visibility and detection', 'color': COLOR_OVERLAY_BOTH},
+            {'label': 'Visibility score 1: Minimal', 'color': COLOR_V_1},
+            {'label': 'Visibility score 2: Medium', 'color': COLOR_V_2},
+            {'label': 'Visibility score 3: Good', 'color': COLOR_V_3},
+            {'label': 'Visibility score 4: Excellent', 'color': COLOR_V_4},
+            {'label': 'Detection score 1: Basic', 'color': COLOR_D_1},
+            {'label': 'Detection score 2: Fair', 'color': COLOR_D_2},
+            {'label': 'Detection score 3: Good', 'color': COLOR_D_3},
+            {'label': 'Detection score 4: Very good', 'color': COLOR_D_4},
+            {'label': 'Detection score 5: Excellent', 'color': COLOR_D_5}
+    ]
     return layer
 
 
-def write_file(filename_prefix, filename, content):
+def create_output_filename(filename_prefix, filename):
+    """
+    Creates a filename using pre determined convention.
+    :param filename_prefix: prefix part of the filename
+    :param filename: filename
+    :return:
+    """
+    return '%s_%s' % (filename_prefix, normalize_name_to_filename(filename))
+
+
+def write_file(filename, content):
     """
     Writes content to a file and ensures if the file already exists it won't be overwritten by appending a number
     as suffix.
-    :param filename_prefix: prefix part of the filename
     :param filename: filename
     :param content: the content of the file that needs to be written to the file
     :return:
     """
-    output_filename = 'output/%s_%s' % (filename_prefix, normalize_name_to_filename(filename))
+    output_filename = 'output/%s' % clean_filename(filename)
     output_filename = get_non_existing_filename(output_filename, 'json')
 
     with open(output_filename, 'w') as f:
@@ -363,6 +411,8 @@ def get_non_existing_filename(filename, extension):
     :param extension:
     :return:
     """
+    if filename.endswith('.' + extension):
+        filename = filename.replace('.' + extension, '')
     if os.path.exists('%s.%s' % (filename, extension)):
         suffix = 1
         while os.path.exists('%s_%s.%s' % (filename, suffix, extension)):
@@ -382,7 +432,7 @@ def backup_file(filename):
     suffix = 1
     backup_filename = filename.replace('.yaml', '_backup_' + str(suffix) + '.yaml')
     while os.path.exists(backup_filename):
-        backup_filename = backup_filename.replace('_backup_' + str(suffix) + '.yaml', '_backup_' + str(suffix+1) + '.yaml')
+        backup_filename = backup_filename.replace('_backup_' + str(suffix) + '.yaml', '_backup_' + str(suffix + 1) + '.yaml')
         suffix += 1
 
     shutil.copy2(filename, backup_filename)
@@ -466,7 +516,7 @@ def ask_multiple_choice(question, list_answers):
         answer = input(' >>   ')
         print('')
 
-    return list_answers[int(answer)-1]
+    return list_answers[int(answer) - 1]
 
 
 def fix_date_and_remove_null(yaml_file, date, input_type='ruamel'):
@@ -489,7 +539,7 @@ def fix_date_and_remove_null(yaml_file, date, input_type='ruamel'):
     elif input_type == 'file':
         new_lines = yaml_file.readlines()
 
-    fixed_lines = [l.replace('\'' + date + '\'', date).replace('null', '')
+    fixed_lines = [l.replace('\'' + str(date) + '\'', str(date)).replace('null', '')
                    if REGEX_YAML_DATE.match(l) else
                    l.replace('null', '') for l in new_lines]
 
@@ -510,8 +560,10 @@ def get_latest_score_obj(yaml_object):
         newest_score_obj = None
         newest_date = None
         for score_obj in yaml_object['score_logbook']:
-            if not newest_score_obj or score_obj['date'] > newest_date:
-                newest_date = score_obj['date']
+            score_obj_date = score_obj['date']
+
+            if not newest_score_obj or score_obj_date > newest_date:
+                newest_date = score_obj_date
                 newest_score_obj = score_obj
 
         return newest_score_obj
@@ -551,7 +603,7 @@ def get_latest_date(yaml_object):
 def get_latest_auto_generated(yaml_object):
     """
     Return the latest auto_generated value present in the score_logbook
-    :param yaml_object: a detection or visibility YAML object
+    :param yaml_object: a visibility YAML object
     :return: True or False
     """
     score_obj = get_latest_score_obj(yaml_object)
@@ -593,12 +645,41 @@ def platform_to_name(platform, separator='-'):
     :param separator: a string value that separates multiple platforms. Default is '-'
     :return: a filename friendly representation of the value of platform
     """
-    if platform == 'all':
+    if set(platform) == set(PLATFORMS.values()) or platform == 'all' or 'all' in platform:
         return 'all'
     elif isinstance(platform, list):
         return separator.join(platform)
     else:
         return ''
+
+
+def get_applicable_data_sources_platform(platforms):
+    """
+    Get the applicable ATT&CK data sources for the provided platform(s)
+    :param platforms: the ATT&CK platform(s)
+    :return: a list of applicable ATT&CK data sources
+    """
+    applicable_data_sources = set()
+
+    for p in platforms:
+        applicable_data_sources.update(DATA_SOURCES[p])
+
+    return list(applicable_data_sources)
+
+
+def get_applicable_data_sources_technique(technique_data_sources, platform_applicable_data_sources):
+    """
+    Get the applicable ATT&CK data sources for the provided technique's data sources (for which the source is ATT&CK CTI)
+    :param technique_data_sources: the ATT&CK technique's data sources
+    :param platform_applicable_data_sources: a list of applicable ATT&CK data sources based on 'DATA_SOURCES'
+    :return: a list of applicable data sources
+    """
+    applicable_data_sources = set()
+    for ds in technique_data_sources:
+        if ds in platform_applicable_data_sources:
+            applicable_data_sources.add(ds)
+
+    return list(applicable_data_sources)
 
 
 def map_techniques_to_data_sources(techniques, my_data_sources):
@@ -656,7 +737,7 @@ def calculate_score(list_detections, zero_value=0):
     number = 0
     for v in list_detections:
         score = get_latest_score(v)
-        if score >= 0:
+        if score is not None and score >= 0:
             avg_score += score
             number += 1
 
@@ -700,6 +781,45 @@ def set_yaml_dv_comments(yaml_object):
     return yaml_object
 
 
+def traverse_dict(obj, callback=None):
+    """
+    Traverse all items in a dictionary
+    :param obj: dictionary, list or value
+    :param callback: a function that will be called to modify a value
+    :return: value or call callback function
+    """
+    if isinstance(obj, dict):
+        value = {k: traverse_dict(v, callback)
+                 for k, v in obj.items()}
+    elif isinstance(obj, list):
+        value = [traverse_dict(elem, callback)
+                 for elem in obj]
+    else:
+        value = obj
+
+    if callback is None:  # if a callback is provided, call it to get the new value
+        return value
+    else:
+        return callback(value)
+
+
+def _traverse_modify_date(obj):
+    """
+    Make sure that all dates are of the type datetime.date
+    :param obj: dictionary
+    :return: function call
+    """
+    def _transformer(value):
+        if type(value) == dt:
+            value = value.date()
+        elif type(value) == ruamelTimeStamp:
+            value = ruamelTimeStamp.date(value)
+
+        return value
+
+    return traverse_dict(obj, callback=_transformer)
+
+
 def load_techniques(file):
     """
     Loads the techniques (including detection and visibility properties).
@@ -716,6 +836,8 @@ def load_techniques(file):
         _yaml = init_yaml()
         with open(file, 'r') as yaml_file:
             yaml_content = _yaml.load(yaml_file)
+
+    yaml_content = _traverse_modify_date(yaml_content)
 
     for d in yaml_content['techniques']:
         if 'detection' in d:
@@ -786,8 +908,8 @@ def _check_file_type(filename, file_type=None):
 
 def check_file(filename, file_type=None, health_is_called=False):
     """
-    Calls three functions to perform the following checks: is the file a valid YAML file, needs the file to be upgrade,
-    does the file contain errors.
+    Calls four functions to perform the following checks: is the file a valid YAML file, needs the file to be upgraded,
+    does the file contain errors or does the file need a sub-techniques upgrade.
     :param filename: path to a YAML file
     :param file_type: value to check against the 'file_type' key in the YAML file
     :param health_is_called: boolean that specifies if detailed errors in the file will be printed by the function 'check_yaml_file_health'
@@ -801,9 +923,49 @@ def check_file(filename, file_type=None, health_is_called=False):
         upgrade_yaml_file(filename, file_type, yaml_content['version'], load_attack_data(DATA_TYPE_STIX_ALL_TECH))
         check_yaml_file_health(filename, file_type, health_is_called)
 
+        if file_type == FILE_TYPE_TECHNIQUE_ADMINISTRATION:
+            if not check_yaml_updated_to_sub_techniques(filename):
+                return None
+
         return yaml_content['file_type']
 
     return yaml_content  # value is None
+
+
+def make_layer_metadata_compliant(metadata):
+    """
+    Make sure the metadata values in the Navigator layer file are compliant with the expected data structure
+    from the latest version on: https://github.com/mitre-attack/attack-navigator/tree/master/layers
+    :param metadata: list of metadata dictionaries
+    :return: compliant list of metadata dictionaries
+    """
+    for md_item in metadata:
+        if not 'divider' in md_item.keys() and (not md_item['value'] or md_item['value'] == ''):
+            md_item['value'] = '-'
+
+    return metadata
+
+
+def add_metadata_technique_object(technique, obj_type, metadata):
+    """
+    Add the metadata for a detection or visibility object as used within any type of overlay.
+    :param technique: technique object containing both the visibility and detection object
+    :param obj_type: valid values are 'detection' and 'visibility'
+    :param metadata: a list to which the metadata will be added
+    :return: the created metadata as a list
+    """
+    if obj_type not in ['detection', 'visibility']:
+        raise Exception("Invalid value for 'obj_type' provided.")
+
+    metadata.append({'divider': True})
+    metadata.append({'name': 'Applicable to', 'value': ', '.join(set([a for v in technique[obj_type] for a in v['applicable_to']]))})  # noqa
+    metadata.append({'name': '' + obj_type.capitalize() + ' score', 'value': ', '.join([str(calculate_score(technique[obj_type]))])})  # noqa
+    if obj_type == 'detection':
+        metadata.append({'name': '' + obj_type.capitalize() + ' location', 'value': ', '.join(set([a for v in technique[obj_type] for a in v['location']]))})  # noqa
+    metadata.append({'name': '' + obj_type.capitalize() + ' comment', 'value': ' | '.join(set(filter(lambda x: x != '', map(lambda k: k['comment'], technique[obj_type]))))})  # noqa
+    metadata.append({'name': '' + obj_type.capitalize() + ' score comment', 'value': ' | '.join(set(filter(lambda x: x != '', map(lambda i: get_latest_comment(i), technique[obj_type]))))})  # noqa
+
+    return metadata
 
 
 def get_updates(update_type, sort='modified'):
@@ -926,7 +1088,7 @@ def get_statistics_data_sources():
     data_sources_dict_sorted = dict(sorted(data_sources_dict.items(), key=lambda kv: kv[1]['count'], reverse=True))
     str_format = '{:<6s} {:s}'
     print(str_format.format('Count', 'Data Source'))
-    print('-'*50)
+    print('-' * 50)
     for k, v in data_sources_dict_sorted.items():
         print(str_format.format(str(v['count']), k))
 
@@ -944,12 +1106,103 @@ def get_platform_from_yaml(yaml_content):
         platform = [platform]
     platform = [p.lower() for p in platform if p is not None]
 
-    if platform == ['all']:
-        platform = 'all'
+    if 'all' in platform:
+        platform = list(PLATFORMS.values())
     else:
         valid_platform_list = []
         for p in platform:
             if p in PLATFORMS.keys():
                 valid_platform_list.append(PLATFORMS[p])
         platform = valid_platform_list
+    return platform
+
+
+def clean_filename(filename):
+    """
+    Remove invalid characters from filename and maximize it to 200 characters
+    :param filename: Input filename
+    :return: sanitized filename
+    """
+    return filename.replace('/', '').replace('\\', '').replace(':', '')[:200]
+
+
+def get_technique_from_yaml(yaml_content, technique_id):
+    """
+    Generic function to lookup a specific technique_id in the YAML content.
+    :param techniques: list with all techniques
+    :param technique_id: technique_id to look for
+    :return: the technique you're searching for. None if not found.
+    """
+    for tech in yaml_content['techniques']:
+        if tech['technique_id'] == technique_id:
+            return tech
+
+
+def remove_technique_from_yaml(yaml_content, technique_id):
+    """
+    Function to delete a specific technique in the YAML content.
+    :param techniques: list with all techniques
+    :param technique_id: technique_id to look for
+    :return: none
+    """
+    for tech in yaml_content['techniques']:
+        if tech['technique_id'] == technique_id:
+            yaml_content['techniques'].remove(tech)
+            return
+
+
+def determine_and_set_show_sub_techniques(techniques_layer):
+    """
+    Function to determine if showSubtechniques should be set. And if so, it will be set in the layer dict.
+    :param techniques_layer: dict with items for the Navigator layer file
+    :return:
+    """
+    # determine if technique needs to be collapsed to show sub-techniques
+    # show subtechniques when technique contains subtechniques:
+    for t in techniques_layer:
+        if len(t['techniqueID']) == 5:
+            show_sub_techniques = False
+            for subtech in techniques_layer:
+                if len(subtech['techniqueID']) == 9:
+                    if t['techniqueID'] in subtech['techniqueID']:
+                        show_sub_techniques = True
+                        break
+            t['showSubtechniques'] = show_sub_techniques
+    # add technique with showSubtechnique attribute, when sub-technique is present and technique isn't:
+    techniques_to_add = {}
+    for subtech in techniques_layer:
+        if len(subtech['techniqueID']) == 9:
+            technique_present = False
+            # Is technique already added:
+            if subtech['techniqueID'][:5] in techniques_to_add.keys():
+                technique_present = True
+            # Is technique already in the techniques_layer:
+            else:
+                for t in techniques_layer:
+                    if len(t['techniqueID']) == 5:
+                        if t['techniqueID'] in subtech['techniqueID']:
+                            technique_present = True
+            if not technique_present:
+                new_tech = dict()
+                new_tech['techniqueID'] = subtech['techniqueID'][:5]
+                new_tech['showSubtechniques'] = True
+                techniques_to_add[new_tech['techniqueID']] = new_tech
+    techniques_layer.extend(list(techniques_to_add.values()))
+
+
+def set_platform(platform_yaml, platform_args):
+    """
+    Get the correct value for the ATT&CK platform(s). Use the platform(s) from the YAML file or the ones provided via the CLI arguments.
+    :param platform_yaml: the platform(s) key-value pair from the YAML file
+    :param platform_args: the platform list as provided by the user
+    :return: platform(s) in a list
+    """
+    if isinstance(platform_args, list):
+        if 'all' in platform_args:
+            platform = list(PLATFORMS.values())
+        else:
+            platform = platform_args
+    else:
+        platform = platform_yaml
+
     return platform

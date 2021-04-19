@@ -2,7 +2,7 @@ import re
 
 APP_NAME = 'DeTT&CT'
 APP_DESC = 'Detect Tactics, Techniques & Combat Threats'
-VERSION = '1.2.6'
+VERSION = '1.4.2'
 
 EXPIRE_TIME = 60 * 60 * 24
 
@@ -44,7 +44,7 @@ COLOR_DS_99p_HAPPY = '#689F38'
 COLOR_DS_100p_HAPPY = '#33691E'
 
 # Detection colors (green range)
-COLOR_D_0 = '#64B5F6'  # Blue: Forensics/Context
+COLOR_D_0 = '#9C27B0'  # Purple: Forensics/Context
 COLOR_D_1 = '#DCEDC8'
 COLOR_D_2 = '#AED581'
 COLOR_D_3 = '#8BC34A'
@@ -56,6 +56,14 @@ COLOR_V_1 = '#BBDEFB'
 COLOR_V_2 = '#64B5F6'
 COLOR_V_3 = '#1976D2'
 COLOR_V_4 = '#0D47A1'
+
+# Orange overlay colors
+COLOR_O_0 = '#FFECB7'
+COLOR_O_1 = '#FFE07A'
+COLOR_O_2 = '#FFCA28'
+COLOR_O_3 = '#FFAE00'
+COLOR_O_4 = '#FF8F00'
+COLOR_O_5 = '#FF6F00'
 
 COLOR_WHITE = '#FFFFFF'
 
@@ -111,14 +119,14 @@ V_UPDATE_ACTION_DIFF = 'the user decides to update or not'
 
 # YAML regex
 REGEX_YAML_VERSION_10 = re.compile(r'^\s*version:\s+1\.0\s*$', re.IGNORECASE)
-REGEX_YAML_TECHNIQUE_ID = re.compile(r'^-\s+technique_id:\s+T[0-9]{4}\s*$', re.IGNORECASE)
-REGEX_YAML_TECHNIQUE_ID_FORMAT = re.compile(r'T[0-9]{4}', re.IGNORECASE)
+REGEX_YAML_TECHNIQUE_ID = re.compile(r'^-\s+technique_id:\s+T\d{4}(\.\d{3}|)\s*$', re.IGNORECASE)
+REGEX_YAML_TECHNIQUE_ID_FORMAT = re.compile(r'T\d{4}(\.\d{3}|)', re.IGNORECASE)
 REGEX_YAML_DETECTION = re.compile(r'^\s+detection:\s*$', re.IGNORECASE)
 REGEX_YAML_VISIBILITY = re.compile(r'^\s+visibility:\s*$', re.IGNORECASE)
 REGEX_YAML_INDENT_CHARS = re.compile(r'(^[\s-]+).*', re.IGNORECASE)
 REGEX_YAML_VALID_DATE = re.compile(r'([12]\d{3}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01]))', re.IGNORECASE)
 REGEX_YAML_DATE = re.compile(r'^[\s-]+date:.*$', re.IGNORECASE)
-REGEX_YAML_TECHNIQUE_ID_GROUP = re.compile(r'^-\s+technique_id:\s+(T[0-9]{4})\s*$', re.IGNORECASE)
+REGEX_YAML_TECHNIQUE_ID_GROUP = re.compile(r'^-\s+technique_id:\s+(T\d{4})\s*$', re.IGNORECASE)
 
 # YAML objects
 YAML_OBJ_VISIBILITY = {'applicable_to': ['all'],
@@ -131,6 +139,7 @@ YAML_OBJ_VISIBILITY = {'applicable_to': ['all'],
                                 'auto_generated': True}
                            ]
                        }
+
 YAML_OBJ_DETECTION = {'applicable_to': ['all'],
                       'location': [''],
                       'comment': '',
@@ -139,7 +148,7 @@ YAML_OBJ_DETECTION = {'applicable_to': ['all'],
                               {'date': None,
                                'score': -1,
                                'comment': ''}
-                          ]}
+                      ]}
 
 YAML_OBJ_TECHNIQUE = {'technique_id': '',
                       'technique_name': '',
@@ -173,5 +182,47 @@ EQL_INVALID_RESULT_TECH = '[!] Invalid technique administration content. Check y
 HEALTH_ERROR_TXT = '[!] The below YAML file contains possible errors. It\'s recommended to check via the ' \
                    '\'--health\' argument or using the option in the interactive menu: \n    - '
 
-PLATFORMS = {'windows': 'Windows', 'linux': 'Linux', 'macos': 'macOS', 'aws': 'AWS', 'gcp': 'GCP', 'azure': 'Azure',
-             'azure ad': 'Azure AD', 'office 365': 'Office 365', 'saas': 'SaaS'}
+PLATFORMS = {'windows': 'Windows', 'linux': 'Linux', 'pre': 'PRE', 'macos': 'macOS', 'aws': 'AWS', 'gcp': 'GCP', 'azure': 'Azure',
+             'azure ad': 'Azure AD', 'office 365': 'Office 365', 'saas': 'SaaS', 'network': 'Network'}
+
+# Data sources applicable per platform
+DATA_SOURCES = {'Windows': ['Access tokens', 'Anti-virus', 'API monitoring', 'Application logs', 'Asset management', 'Authentication logs', 'Binary file metadata', 'BIOS', 'Browser extensions',
+                            'Component firmware', 'Data loss prevention', 'Detonation chamber', 'Digital certificate logs', 'Disk forensics', 'DLL monitoring', 'DNS records', 'EFI', 'Email gateway',
+                            'Environment variable', 'File monitoring', 'Host network interface', 'Kernel drivers', 'Loaded DLLs', 'Mail server', 'Malware reverse engineering', 'MBR', 'Named Pipes',
+                            'Netflow/Enclave netflow', 'Network device logs', 'Network intrusion detection system', 'Network protocol analysis', 'Packet capture', 'PowerShell logs',
+                            'Process command-line parameters', 'Process monitoring', 'Process use of network', 'Sensor health and status', 'Services', 'SSL/TLS inspection', 'System calls',
+                            'Third-party application logs', 'User interface', 'VBR', 'Web application firewall logs', 'Web logs', 'Web proxy', 'Windows Error Reporting', 'Windows event logs',
+                            'Windows Registry', 'WMI Objects'],
+                'Linux': ['Anti-virus', 'API monitoring', 'Application logs', 'Asset management', 'Authentication logs', 'Binary file metadata', 'BIOS', 'Browser extensions', 'Component firmware',
+                          'Data loss prevention', 'Detonation chamber', 'Digital certificate logs', 'Disk forensics', 'DNS records', 'EFI', 'Email gateway', 'Environment variable', 'File monitoring',
+                          'Host network interface', 'Kernel drivers', 'Mail server', 'Malware reverse engineering', 'MBR', 'Named Pipes', 'Netflow/Enclave netflow', 'Network device logs',
+                          'Network intrusion detection system', 'Network protocol analysis', 'Packet capture', 'PowerShell logs', 'Process command-line parameters', 'Process monitoring',
+                          'Process use of network', 'Sensor health and status', 'Services', 'SSL/TLS inspection', 'System calls', 'Third-party application logs', 'User interface', 'VBR',
+                          'Web application firewall logs', 'Web logs', 'Web proxy'],
+                'PRE': ['Domain registration', 'Email gateway', 'Mail server', 'Network device logs', 'Packet capture', 'Social media monitoring', 'SSL/TLS certificates', 'Web logs'],
+                'macOS': ['Anti-virus', 'API monitoring', 'Application logs', 'Asset management', 'Authentication logs', 'Binary file metadata', 'BIOS', 'Browser extensions', 'Component firmware',
+                          'Data loss prevention', 'Detonation chamber', 'Digital certificate logs', 'Disk forensics', 'DNS records', 'EFI', 'Email gateway', 'Environment variable', 'File monitoring',
+                          'Host network interface', 'Kernel drivers', 'Mail server', 'Malware reverse engineering', 'MBR', 'Named Pipes', 'Netflow/Enclave netflow', 'Network device logs',
+                          'Network intrusion detection system', 'Network protocol analysis', 'Packet capture', 'PowerShell logs', 'Process command-line parameters', 'Process monitoring',
+                          'Process use of network', 'Sensor health and status', 'Services', 'SSL/TLS inspection', 'System calls', 'Third-party application logs', 'User interface', 'VBR',
+                          'Web application firewall logs', 'Web logs', 'Web proxy'],
+                'AWS': ['Anti-virus', 'API monitoring', 'Application logs', 'Asset management', 'Authentication logs', 'AWS CloudTrail logs', 'AWS OS logs', 'Binary file metadata', 'Data loss prevention',
+                        'Detonation chamber', 'DNS records', 'Email gateway', 'File monitoring', 'Mail server', 'Malware reverse engineering', 'Netflow/Enclave netflow', 'Network device logs',
+                        'Network intrusion detection system', 'Network protocol analysis', 'Packet capture', 'Sensor health and status', 'SSL/TLS inspection', 'Third-party application logs',
+                        'Web application firewall logs', 'Web logs', 'Web proxy'],
+                'GCP': ['Anti-virus', 'API monitoring', 'Application logs', 'Asset management', 'Authentication logs', 'Binary file metadata', 'Data loss prevention', 'Detonation chamber',
+                        'DNS records', 'Email gateway', 'File monitoring', 'GCP audit logs', 'Mail server', 'Malware reverse engineering', 'Netflow/Enclave netflow', 'Network device logs',
+                        'Network intrusion detection system', 'Network protocol analysis', 'Packet capture', 'Sensor health and status', 'SSL/TLS inspection', 'Stackdriver logs',
+                        'Third-party application logs', 'Web application firewall logs', 'Web logs', 'Web proxy'],
+                'Azure': ['Anti-virus', 'API monitoring', 'Application logs', 'Asset management', 'Authentication logs', 'Azure activity logs', 'Azure OS logs', 'Binary file metadata',
+                          'Data loss prevention', 'DNS records', 'File monitoring', 'Malware reverse engineering', 'Netflow/Enclave netflow', 'Network device logs', 'Network intrusion detection system',
+                          'Network protocol analysis', 'Packet capture', 'Sensor health and status', 'SSL/TLS inspection', 'Third-party application logs', 'Web application firewall logs',
+                          'Web logs', 'Web proxy'],
+                'Azure AD': ['API monitoring', 'Authentication logs', 'Azure activity logs', 'Malware reverse engineering', 'Sensor health and status'],
+                'Office 365': ['Anti-virus', 'API monitoring', 'Authentication logs', 'Azure activity logs', 'Data loss prevention', 'Detonation chamber', 'Email gateway', 'Mail server',
+                               'Malware reverse engineering', 'Office 365 account logs', 'Office 365 audit logs', 'Office 365 trace logs', 'Sensor health and status'],
+                'SaaS': ['Anti-virus', 'API monitoring', 'Application logs', 'Authentication logs', 'Data loss prevention', 'Detonation chamber', 'Email gateway', 'Mail server',
+                         'Malware reverse engineering', 'OAuth audit logs', 'Sensor health and status', 'Third-party application logs', 'Web application firewall logs', 'Web logs'],
+                'Network': ['File monitoring', 'Netflow/Enclave netflow', 'Network device command history', 'Network device configuration', 'Network device logs', 'Network device run-time memory',
+                            'Network protocol analysis', 'Packet capture']
+                }

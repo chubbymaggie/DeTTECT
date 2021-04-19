@@ -7,28 +7,6 @@ import eql
 from copy import deepcopy
 
 
-def _traverse_dict(obj, callback=None):
-    """
-    Traverse all items in a dictionary
-    :param obj: dictionary, list or value
-    :param callback: a function that will be called to modify a value
-    :return: value or call callback function
-    """
-    if isinstance(obj, dict):
-        value = {k: _traverse_dict(v, callback)
-                 for k, v in obj.items()}
-    elif isinstance(obj, list):
-        value = [_traverse_dict(elem, callback)
-                 for elem in obj]
-    else:
-        value = obj
-
-    if callback is None:  # if a callback is provided, call it to get the new value
-        return value
-    else:
-        return callback(value)
-
-
 def _traverse_modify_date(obj):
     """
     Modifies a datetime.date object to a string value
@@ -42,7 +20,7 @@ def _traverse_modify_date(obj):
         else:
             return value
 
-    return _traverse_dict(obj, callback=_transformer)
+    return traverse_dict(obj, callback=_transformer)
 
 
 def _techniques_to_events(techniques, obj_type, include_all_score_objs):
@@ -152,8 +130,10 @@ def _events_to_yaml(query_results, obj_type):
         try:
             for r in query_results:
                 if r['date_registered'] and isinstance(r['date_registered'], str):
+                    r['date_registered'] = REGEX_YAML_VALID_DATE.match(r['date_registered']).group(1)
                     r['date_registered'] = datetime.datetime.strptime(r['date_registered'], '%Y-%m-%d')
                 if r['date_connected'] and isinstance(r['date_connected'], str):
+                    r['date_connected'] = REGEX_YAML_VALID_DATE.match(r['date_connected']).group(1)
                     r['date_connected'] = datetime.datetime.strptime(r['date_connected'], '%Y-%m-%d')
         except KeyError:
             print(EQL_INVALID_RESULT_DS)
@@ -199,7 +179,8 @@ def _events_to_yaml(query_results, obj_type):
                 for k, v in score_logbook_event.items():
                     value = v
                     if isinstance(v, str) and REGEX_YAML_VALID_DATE.match(value):
-                        value = datetime.datetime.strptime(v, '%Y-%m-%d')
+                        value = REGEX_YAML_VALID_DATE.match(v).group(1)
+                        value = datetime.datetime.strptime(value, '%Y-%m-%d')
                     score_obj_yaml[k] = value
 
                 # The detection/visibility dict is missing. Create it.

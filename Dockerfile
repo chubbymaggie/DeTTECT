@@ -1,15 +1,8 @@
-FROM python:3.7-alpine
+FROM python:3.8-slim-buster
 
-LABEL version="1.2.6"
+LABEL version="1.4.2"
 
-# update repository and install Linux packages
-RUN apk update && \
-    apk upgrade && \
-    apk add --no-cache bash libc-dev build-base && \
-    pip3 install --upgrade --no-cache-dir cython && \
-    pip3 install --no-cache-dir numpy==1.17.4
-
-# clone the newest version of DeTT&CT and install requirements
+# copy DeTT&CT and install the requirements
 COPY . /opt/DeTTECT
 WORKDIR /opt/DeTTECT
 RUN pip install --no-cache-dir -r requirements.txt
@@ -19,3 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN mkdir -p input
 # within this directory, the output files from DeTT&CT are written. Such as ATT&CK Navigator layer files.
 RUN mkdir -p output
+
+# set an environment variable for the DeTT&CT Editor and expose port 8080
+ENV DeTTECT_DOCKER_CONTAINER 1
+EXPOSE 8080/tcp
